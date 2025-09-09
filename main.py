@@ -110,8 +110,103 @@ def calculate_MP(df):
 
 
 ########################################################################################################################
+def preprocess_aeroVF(excel, month):
+    month_dict = {
+        "Enero": "Suma de ene",
+        "Febrero": "Suma de feb",
+        "Marzo": "Suma de mar",
+        "Abril": "Suma de abr",
+        "Mayo": "Suma de may",
+        "Junio": "Suma de jun",
+        "Julio": "Suma de jul",
+        "Agosto": "Suma de ago",
+        "Septiembre": "Suma de sep",
+        "Octubre": "Suma de oct",
+        "Noviembre": "Suma de nov",
+        "Diciembre": "Suma de dic"
+    }
+    ## Procesamiento de VF
+    df = pd.read_excel(excel, sheet_name="Pivot", skiprows=3)
+    df = df.loc[df["Line"] == "LMAQ-FAR"]
+    df = df[["Config", "Product Number", "Product Short Description", month_dict[month]]]
+    df = df.dropna(subset=[month_dict[month]])
+    df = df.loc[df["Config"].isin(
+        [ 'SPRAY 150ML_MEN DEODORANTS', 'SPRAY 150ML_WOMEN DEODORANTS'])]
+    df.columns = ["Config", "Product Number", "Product Short Description", "Suma"]
+    return df
+
+def preprocess_aeroFar(excel):
+    df = pd.read_excel(excel,sheet_name="STOCK",skiprows=5)
+    df = df.loc[df["Tipo"] == "MP"]
+    df = df.loc[df["Armazem"] != 10]
+    df = df.loc[df["SEMAFORO DE CADUCIDAD"] != "CADUCADO"]
+    df["Produto"] = df["Produto"].str.replace('LO', '', regex=False)
+    df["Produto"] = df["Produto"].str.upper()
+    df = df.groupby('Produto', as_index=False)[['Qtde']].sum()
+    df.columns = ["Codigo Fareva", "Cantidad Fareva"]
+
+    return df
+
+def preprocess_aeronomen(excel):
+    df = pd.read_excel(excel,sheet_name="nomenclatura",skiprows=0)
+    df = df[["acs","Código Inds.","Cód. Jugo","Cant. Enlace"]]
+    df = df.dropna()
+    df = df.drop_duplicates()
+    df.columns = ["Codigo Comercial", "Codigo Inds.","Cod. Jugo","Cant. Enlace"]
+    df["Cod. Jugo"] = df["Cod. Jugo"].astype(str)
+    df["Cod. Jugo"] = df["Cod. Jugo"].str.upper()
+    print(df)
+
+    return df
+
+
+
 def generate_aerosoles(planeacion_VF, fareva_file, requerimiento_MP_file, month):
-    print("b")
+    with st.spinner("Esperando ..."):
+        VF = preprocess_aeroVF(planeacion_VF, month)
+        stock_fareva = preprocess_aeroFar(fareva_file)
+        size = pd.DataFrame({
+            'Config': ['SPRAY 150ML_MEN DEODORANTS', 'SPRAY 150ML_WOMEN DEODORANTS'],
+            'Size': [32000, 76000]
+        })
+
+        nomenclatura = preprocess_aeronomen(requerimiento_MP_file)
+
+
+        st.session_state.stock_aero_fareva = stock_fareva
+        st.session_state.aero_nomenclatura = nomenclatura
+
+        df_lotes = pd.merge(VF, size, on='Config', how='inner')
+        df_lotes["Lotes"] = np.ceil((df_lotes["Suma"] / df_lotes["Size"]) - 0.1)
+
+        st.session_state.tabla_aerosoles = df_lotes
+
+    st.success("Tablas generadas exitosamente")
+
+
+def calculate_MP_aero(df):
+    stock_fareva = st.session_state.stock_aero_fareva
+    nomenclatura = st.session_state.aero_nomenclatura
+    df = df[["Product Number","Size","Lotes"]]
+
+    df_MP = pd.merge(df,nomenclatura, how="left",left_on="Product Number", right_on="Codigo Comercial" )
+    df_MP = df_MP.dropna(subset=["Codigo Comercial"])
+    df_MP["Cantidad total"] = df_MP["Lotes"] * df_MP["Cant. Enlace"]
+    df_MP_group = df_MP.groupby('Cod. Jugo', as_index=False)[['Cantidad total']].sum()
+    df_MP_group.columns =["Codigo Requerido", "Cantidad Requerida"]
+
+    #print(stock_fareva)
+    #print(df_MP_group)
+
+    st.session_state.aero_tabla_MP = df_MP
+    st.session_state.aero_tabla_MP_group = df_MP_group
+
+    df_MP_to_order = pd.merge( df_MP_group, stock_fareva, how="left", left_on="Codigo Requerido", right_on="Codigo Fareva")
+    df_MP_to_order = df_MP_to_order.loc[df_MP_to_order["Codigo Requerido"] != "511S"]
+    df_MP_to_order = df_MP_to_order.fillna(0)
+    df_MP_to_order["Cantidad a ordenar"] = df_MP_to_order["Cantidad Fareva"] - df_MP_to_order["Cantidad Requerida"]
+    #print(df_MP_to_order.loc[df_MP_to_order["Cantidad a ordenar"]<0])
+    st.session_state.aero_df_MP_to_order = df_MP_to_order.loc[df_MP_to_order["Cantidad a ordenar"]<0]
 
 ########################################################################################################################
 if 'tabla_coyuntural' not in st.session_state:
@@ -125,6 +220,13 @@ if 'nomenclatura' not in st.session_state:
 
 if 'tabla_aerosoles' not in st.session_state:
     st.session_state.tabla_aerosoles = pd.DataFrame()
+
+if 'stock_aero_fareva' not in st.session_state:
+    st.session_state.stock_aero_fareva = pd.DataFrame()
+
+if 'aero_nomenclatura' not in st.session_state:
+    st.session_state.aero_nomenclatura = pd.DataFrame()
+
 ########################################################################################################################
 
 app_mode = st.sidebar.selectbox("Selecciona una pagina", ["Archivos Coyuntural", "Tablas Coyuntural",
@@ -165,22 +267,34 @@ if app_mode == "Tablas Coyuntural":
 ################################################################################################################################
 if app_mode == "Archivos Aerosoles":
     st.title("Aerosoles")
-    planeacion_VF = st.file_uploader("Insertar archivo de Planeación VF", type="xlsx")
-    fareva_file = st.file_uploader("Insertar archivo de ingresos semanales de Fareva", type="xlsx")
-    requerimiento_MP_file = st.file_uploader("Insertar archivo de requerimiento de MPs Coyuntural", type="xlsx")
+    planeacion_aero_VF = st.file_uploader("Insertar archivo de Planeación VF", type="xlsx")
+    fareva_aero_file = st.file_uploader("Insertar archivo de ingresos semanales de Fareva", type="xlsx")
+    requerimiento_aero_MP_file = st.file_uploader("Insertar archivo de Aerosoles", type="xlsx")
 
-    month = st.selectbox(
+    aero_month = st.selectbox(
         "Selecciona el mes a planear",
         ["Elige una opción", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre",
          "Octubre", "Noviembre", "Diciembre"]
     )
 
-    if st.button("Generar Tablas") and month != "Elige una opción":
-        generate_aerosoles(planeacion_VF, fareva_file, requerimiento_MP_file, month)
+    if st.button("Generar Tablas") and aero_month != "Elige una opción":
+        generate_aerosoles(planeacion_aero_VF, fareva_aero_file, requerimiento_aero_MP_file, aero_month)
 
 if app_mode == "Tablas Aerosoles":
     st.title("Tablas Aerosoles")
     st.header("Tabla preliminar sin cubrir este mes")
 
-    st.data_editor(st.session_state.tabla_aerosoles)
+    edited_aero_df = st.data_editor(st.session_state.tabla_aerosoles, disabled=["Config", "Product Number",
+                                                                            "Product Short Description", "Suma",
+                                                                            "Size"])
+    if st.button("Calcular MPs"):
+        calculate_MP_aero(edited_aero_df)
+
+    if 'aero_tabla_MP' in st.session_state:
+        st.header("Tabla de MPs")
+        st.dataframe(st.session_state.aero_tabla_MP)
+        st.header("MPs Agrupados")
+        st.dataframe(st.session_state.aero_tabla_MP_group)
+        st.header("MPs a ordenar")
+        st.dataframe(st.session_state.aero_df_MP_to_order)
 
