@@ -209,6 +209,60 @@ def calculate_MP_aero(df):
     st.session_state.aero_df_MP_to_order = df_MP_to_order.loc[df_MP_to_order["Cantidad a ordenar"]<0]
 
 ########################################################################################################################
+# Configuración de página y estilo
+st.set_page_config(
+    page_title="Planificación de Materias Primas",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# CSS personalizado para mejorar la apariencia
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        color: #2c3e50;
+        text-align: center;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #3498db;
+    }
+    .section-header {
+        color: #2980b9;
+        padding: 0.5rem 0;
+        margin: 1rem 0;
+    }
+    .stButton>button {
+        background-color: #3498db;
+        color: white;
+        border-radius: 5px;
+        padding: 0.5rem 2rem;
+        font-weight: bold;
+    }
+    .stButton>button:hover {
+        background-color: #2980b9;
+    }
+    .card {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+    }
+    .sidebar .css-1d391kg {
+        padding-top: 1rem;
+    }
+    .stAlert {
+        border-radius: 5px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Mantenemos las funciones de procesamiento sin cambios
+# [Todas las funciones existentes...]
+
+# Variables de estado
 if 'tabla_coyuntural' not in st.session_state:
     st.session_state.tabla_coyuntural = pd.DataFrame()
 
@@ -227,74 +281,228 @@ if 'stock_aero_fareva' not in st.session_state:
 if 'aero_nomenclatura' not in st.session_state:
     st.session_state.aero_nomenclatura = pd.DataFrame()
 
-########################################################################################################################
+# Barra lateral mejorada
+with st.sidebar:
+    st.markdown('<div style="text-align: center; margin-bottom: 1rem;"><h3>Planificación de MPs</h3></div>',
+                unsafe_allow_html=True)
+    st.markdown("---")
 
-app_mode = st.sidebar.selectbox("Selecciona una pagina", ["Archivos Coyuntural", "Tablas Coyuntural",
-                                                          "Archivos Aerosoles", "Tablas Aerosoles"])
-if app_mode == "Archivos Coyuntural":
-    st.title("Coyuntural")
-    planeacion_VF = st.file_uploader("Insertar archivo de Planeación VF", type="xlsx")
-    fareva_file = st.file_uploader("Insertar archivo de ingresos semanales de Fareva", type="xlsx")
-    requerimiento_MP_file = st.file_uploader("Insertar archivo de requerimiento de MPs Coyuntural", type="xlsx")
-
-    month = st.selectbox(
-        "Selecciona el mes a planear",
-        ["Elige una opción", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre",
-         "Octubre", "Noviembre", "Diciembre"]
+    app_mode = st.radio(
+        "Navegación",
+        ["📄 Archivos Coyuntural", "📊 Tablas Coyuntural", "📄 Archivos Aerosoles", "📊 Tablas Aerosoles"],
+        key="navigation"
     )
 
-    if st.button("Generar Tablas") and month != "Elige una opción":
-        generate_coyuntural(planeacion_VF, fareva_file,requerimiento_MP_file, month)
+    st.markdown("---")
+    st.markdown("### Información")
+    st.info("Esta aplicación permite planificar y calcular los requerimientos de materias primas.")
 
-if app_mode == "Tablas Coyuntural":
-    st.title("Tablas Coyuntural")
-    st.header("Tabla preliminar sin cubrir este mes")
-    edited_df = st.data_editor(st.session_state.tabla_coyuntural, disabled=["Config", "Product Number",
-                                                                            "Product Short Description","Suma","Size"])
-    if st.button("Calcular MPs"):
-        calculate_MP(edited_df)
+# Contenido principal
+if "Archivos Coyuntural" in app_mode:
+    st.markdown('<h1 class="main-header">Planificación Coyuntural</h1>', unsafe_allow_html=True)
 
-    if 'tabla_MP' in st.session_state:
-        st.header("Tabla de MPs")
-        st.dataframe(st.session_state.tabla_MP)
-        st.header("MPs Agrupados")
-        st.dataframe(st.session_state.tabla_MP_group)
-        st.header("MPs a ordenar")
-        st.dataframe(st.session_state.df_MP_to_order)
+    col1, col2 = st.columns(2)
 
+    with col1:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<h3 class="section-header">Archivos de entrada</h3>', unsafe_allow_html=True)
+        planeacion_VF = st.file_uploader("📎 Archivo de Planeación VF", type="xlsx",
+                                         help="Carga el archivo de planeación VF en formato Excel")
+        fareva_file = st.file_uploader("📎 Ingresos semanales de Fareva", type="xlsx",
+                                       help="Carga el archivo de ingresos semanales en formato Excel")
+        requerimiento_MP_file = st.file_uploader("📎 Requerimiento de MPs Coyuntural", type="xlsx",
+                                                 help="Carga el archivo de requerimientos en formato Excel")
+        st.markdown('</div>', unsafe_allow_html=True)
 
+    with col2:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<h3 class="section-header">Parámetros</h3>', unsafe_allow_html=True)
 
-################################################################################################################################
-if app_mode == "Archivos Aerosoles":
-    st.title("Aerosoles")
-    planeacion_aero_VF = st.file_uploader("Insertar archivo de Planeación VF", type="xlsx")
-    fareva_aero_file = st.file_uploader("Insertar archivo de ingresos semanales de Fareva", type="xlsx")
-    requerimiento_aero_MP_file = st.file_uploader("Insertar archivo de Aerosoles", type="xlsx")
+        month = st.selectbox(
+            "🗓️ Mes a planear",
+            ["Elige una opción", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        )
 
-    aero_month = st.selectbox(
-        "Selecciona el mes a planear",
-        ["Elige una opción", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre",
-         "Octubre", "Noviembre", "Diciembre"]
-    )
+        all_files_uploaded = planeacion_VF and fareva_file and requerimiento_MP_file
+        if not all_files_uploaded:
+            st.warning("Por favor, carga todos los archivos necesarios")
 
-    if st.button("Generar Tablas") and aero_month != "Elige una opción":
-        generate_aerosoles(planeacion_aero_VF, fareva_aero_file, requerimiento_aero_MP_file, aero_month)
+        generate_button = st.button("✅ Generar Tablas",
+                                    disabled=(not all_files_uploaded or month == "Elige una opción"))
 
-if app_mode == "Tablas Aerosoles":
-    st.title("Tablas Aerosoles")
-    st.header("Tabla preliminar sin cubrir este mes")
+        if generate_button:
+            generate_coyuntural(planeacion_VF, fareva_file, requerimiento_MP_file, month)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    edited_aero_df = st.data_editor(st.session_state.tabla_aerosoles, disabled=["Config", "Product Number",
-                                                                            "Product Short Description", "Suma",
-                                                                            "Size"])
-    if st.button("Calcular MPs"):
-        calculate_MP_aero(edited_aero_df)
+elif "Tablas Coyuntural" in app_mode:
+    st.markdown('<h1 class="main-header">Análisis de Datos Coyuntural</h1>', unsafe_allow_html=True)
 
-    if 'aero_tabla_MP' in st.session_state:
-        st.header("Tabla de MPs")
-        st.dataframe(st.session_state.aero_tabla_MP)
-        st.header("MPs Agrupados")
-        st.dataframe(st.session_state.aero_tabla_MP_group)
-        st.header("MPs a ordenar")
-        st.dataframe(st.session_state.aero_df_MP_to_order)
+    if st.session_state.tabla_coyuntural.empty:
+        st.warning(
+            "No hay datos disponibles. Por favor, genera las tablas primero en la sección 'Archivos Coyuntural'.")
+    else:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<h3 class="section-header">Tabla preliminar sin cubrir este mes</h3>', unsafe_allow_html=True)
+        edited_df = st.data_editor(
+            st.session_state.tabla_coyuntural,
+            disabled=["Config", "Product Number", "Product Short Description", "Suma", "Size"],
+            use_container_width=True,
+            hide_index=True
+        )
 
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            calculate_button = st.button("🧮 Calcular MPs")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if calculate_button:
+            calculate_MP(edited_df)
+
+        if 'tabla_MP' in st.session_state:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown('<div class="card">', unsafe_allow_html=True)
+                st.markdown('<h3 class="section-header">Tabla de MPs</h3>', unsafe_allow_html=True)
+                st.dataframe(st.session_state.tabla_MP, use_container_width=True, hide_index=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            with col2:
+                st.markdown('<div class="card">', unsafe_allow_html=True)
+                st.markdown('<h3 class="section-header">MPs Agrupados</h3>', unsafe_allow_html=True)
+                st.dataframe(st.session_state.tabla_MP_group, use_container_width=True, hide_index=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown('<h3 class="section-header">MPs a ordenar</h3>', unsafe_allow_html=True)
+
+            # Métricas importantes
+            if not st.session_state.df_MP_to_order.empty:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(
+                        "Total de MPs a ordenar",
+                        f"{len(st.session_state.df_MP_to_order)}"
+                    )
+                with col2:
+                    st.metric(
+                        "Faltante más crítico",
+                        f"{abs(st.session_state.df_MP_to_order['Cantidad a ordenar'].min()):.0f}"
+                    )
+                with col3:
+                    st.metric(
+                        "Códigos sin stock",
+                        f"{len(st.session_state.df_MP_to_order[st.session_state.df_MP_to_order['Cantidad Fareva'] == 0])}"
+                    )
+
+            st.dataframe(st.session_state.df_MP_to_order, use_container_width=True, hide_index=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+elif "Archivos Aerosoles" in app_mode:
+    st.markdown('<h1 class="main-header">Planificación de Aerosoles</h1>', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<h3 class="section-header">Archivos de entrada</h3>', unsafe_allow_html=True)
+        planeacion_aero_VF = st.file_uploader("📎 Archivo de Planeación VF", type="xlsx",
+                                              help="Carga el archivo de planeación VF en formato Excel")
+        fareva_aero_file = st.file_uploader("📎 Ingresos semanales de Fareva", type="xlsx",
+                                            help="Carga el archivo de ingresos semanales en formato Excel")
+        requerimiento_aero_MP_file = st.file_uploader("📎 Archivo de Aerosoles", type="xlsx",
+                                                      help="Carga el archivo de aerosoles en formato Excel")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col2:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<h3 class="section-header">Parámetros</h3>', unsafe_allow_html=True)
+
+        aero_month = st.selectbox(
+            "🗓️ Mes a planear",
+            ["Elige una opción", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"],
+            key="aero_month"
+        )
+
+        all_files_uploaded = planeacion_aero_VF and fareva_aero_file and requerimiento_aero_MP_file
+        if not all_files_uploaded:
+            st.warning("Por favor, carga todos los archivos necesarios")
+
+        generate_button = st.button("✅ Generar Tablas",
+                                    disabled=(not all_files_uploaded or aero_month == "Elige una opción"))
+
+        if generate_button:
+            generate_aerosoles(planeacion_aero_VF, fareva_aero_file, requerimiento_aero_MP_file, aero_month)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+elif "Tablas Aerosoles" in app_mode:
+    st.markdown('<h1 class="main-header">Análisis de Datos de Aerosoles</h1>', unsafe_allow_html=True)
+
+    if st.session_state.tabla_aerosoles.empty:
+        st.warning("No hay datos disponibles. Por favor, genera las tablas primero en la sección 'Archivos Aerosoles'.")
+    else:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<h3 class="section-header">Tabla preliminar sin cubrir este mes</h3>', unsafe_allow_html=True)
+        edited_aero_df = st.data_editor(
+            st.session_state.tabla_aerosoles,
+            disabled=["Config", "Product Number", "Product Short Description", "Suma", "Size"],
+            use_container_width=True,
+            hide_index=True
+        )
+
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            calculate_button = st.button("🧮 Calcular MPs")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if calculate_button:
+            calculate_MP_aero(edited_aero_df)
+
+        if 'aero_tabla_MP' in st.session_state:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown('<div class="card">', unsafe_allow_html=True)
+                st.markdown('<h3 class="section-header">Tabla de MPs</h3>', unsafe_allow_html=True)
+                st.dataframe(st.session_state.aero_tabla_MP, use_container_width=True, hide_index=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            with col2:
+                st.markdown('<div class="card">', unsafe_allow_html=True)
+                st.markdown('<h3 class="section-header">MPs Agrupados</h3>', unsafe_allow_html=True)
+                st.dataframe(st.session_state.aero_tabla_MP_group, use_container_width=True, hide_index=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown('<h3 class="section-header">MPs a ordenar</h3>', unsafe_allow_html=True)
+
+            # Métricas importantes
+            if not st.session_state.aero_df_MP_to_order.empty:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(
+                        "Total de MPs a ordenar",
+                        f"{len(st.session_state.aero_df_MP_to_order)}"
+                    )
+                with col2:
+                    st.metric(
+                        "Faltante más crítico",
+                        f"{abs(st.session_state.aero_df_MP_to_order['Cantidad a ordenar'].min()):.0f}"
+                    )
+                with col3:
+                    st.metric(
+                        "Códigos sin stock",
+                        f"{len(st.session_state.aero_df_MP_to_order[st.session_state.aero_df_MP_to_order['Cantidad Fareva'] == 0])}"
+                    )
+
+            st.dataframe(st.session_state.aero_df_MP_to_order, use_container_width=True, hide_index=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+# Pie de página
+st.markdown("""
+<div style="text-align: center; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #ddd; color: #666;">
+    <small>Aplicación de Planificación de Materias Primas | v1.0</small>
+</div>
+""", unsafe_allow_html=True)
